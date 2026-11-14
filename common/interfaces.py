@@ -101,7 +101,11 @@ class MockDataGuard:
     """Basic placeholder that rejects records missing primaryid or drugname."""
 
     def validate(self, record: Mapping[str, Any], source: str) -> ValidationResult:
-        key = record_id(record)
+        try:
+            key = record_id(record)
+        except ValueError:
+            key = ""
+
         missing = [
             field_name
             for field_name in ("primaryid", "drugname")
