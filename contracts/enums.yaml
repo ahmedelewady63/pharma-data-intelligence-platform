@@ -1,0 +1,20 @@
+# Shared enumerations. Changes require an owner-led contracts PR and consumer review.
+matching_status:
+  - MATCHED
+  - NEEDS_REVIEW
+  - UNMATCHED
+  - CONFLICT
+
+data_quality_status:
+  - ACCEPTED
+  - REJECTED
+  - NEEDS_REVIEW
+
+match_method:
+  - exact
+  - brand_to_ingredient
+  - ndc
+  - fuzzy
+  - none
+  - ingredient # Egyptian catalog only
+  - set_ingredient # Egyptian catalog only
