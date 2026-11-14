@@ -16,7 +16,5 @@ match_method:
   - ndc
   - fuzzy
   - none
-
-egypt_match_method:
-  - ingredient
-  - set_ingredient
+  - ingredient # Egyptian catalog only
+  - set_ingredient # Egyptian catalog only
