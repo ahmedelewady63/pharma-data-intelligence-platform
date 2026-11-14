@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-_INGREDIENT_SEPARATOR_RE = re.compile(r"\\\\|/|;|\\+|\\s+AND\\s+", re.IGNORECASE)
+_INGREDIENT_SEPARATOR_RE = re.compile(r"\\|/|;|\+|\s+AND\s+", re.IGNORECASE)
 
 
 def split_ingredients(text: str) -> list[str]:
