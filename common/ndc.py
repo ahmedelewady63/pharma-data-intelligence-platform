@@ -34,7 +34,9 @@ def normalize_ndc11(value: str | None) -> str | None:
     if padding is None:
         raise ValueError(f"Unsupported hyphenated NDC layout: {value!r}")
 
-    normalized = "".join(piece.zfill(len(piece) + pad) for piece, pad in zip(pieces, padding))
+    normalized = "".join(
+        piece.zfill(len(piece) + pad) for piece, pad in zip(pieces, padding, strict=True)
+    )
     if len(normalized) != 11:
         raise ValueError(f"Could not normalize NDC to 11 digits: {value!r}")
     return normalized
