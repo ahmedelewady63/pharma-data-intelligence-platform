@@ -18,7 +18,13 @@ from matching.index import RxNormIndex
 def rxnorm_rows():
     return [
         {"RXCUI": "1001", "SAB": "RXNORM", "TTY": "IN", "STR": "Alpha Ingredient", "SUPPRESS": "N"},
-        {"RXCUI": "1002", "SAB": "RXNORM", "TTY": "PIN", "STR": "Alpha Ingredient", "SUPPRESS": "N"},
+        {
+            "RXCUI": "1002",
+            "SAB": "RXNORM",
+            "TTY": "PIN",
+            "STR": "Alpha Ingredient",
+            "SUPPRESS": "N",
+        },
         {"RXCUI": "1003", "SAB": "RXNORM", "TTY": "MIN", "STR": "Alpha + Beta", "SUPPRESS": "N"},
         {"RXCUI": "1004", "SAB": "RXNORM", "TTY": "BN", "STR": "Example Brand", "SUPPRESS": "N"},
         {
