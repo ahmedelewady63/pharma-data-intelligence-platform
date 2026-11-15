@@ -122,9 +122,7 @@ def strip_dose(value: str | None) -> str:
     """Remove recognized strength expressions while retaining other words."""
     text = fold_unicode(value)
     without_strength = _STRENGTH_RE.sub(" ", text)
-    without_loose_punctuation = re.sub(
-        r"(?<![A-Z0-9])[./-]+(?![A-Z0-9])", " ", without_strength
-    )
+    without_loose_punctuation = re.sub(r"(?<![A-Z0-9])[./-]+(?![A-Z0-9])", " ", without_strength)
     return _MULTI_SPACE_RE.sub(" ", without_loose_punctuation).strip()
 
 
