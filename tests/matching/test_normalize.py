@@ -138,6 +138,4 @@ def test_strength_removal_preserves_other_words():
 
 
 def test_salt_spelling_is_preserved_without_an_approved_synonym():
-    assert normalize_name("METFORMIN HYDROCHLORIDE 500 mg tablet") == (
-        "METFORMIN HYDROCHLORIDE"
-    )
+    assert normalize_name("METFORMIN HYDROCHLORIDE 500 mg tablet") == ("METFORMIN HYDROCHLORIDE")
