@@ -15,7 +15,7 @@ from matching.ingredients import split_ingredients
         ("amoxicillin/clavulanic acid", ["amoxicillin", "clavulanic acid"]),
         ("sulfamethoxazole AND trimethoprim", ["sulfamethoxazole", "trimethoprim"]),
         ("aspirin; caffeine", ["aspirin", "caffeine"]),
-        ("acetaminophen \ codeine", ["acetaminophen", "codeine"]),
+        (r"acetaminophen \ codeine", ["acetaminophen", "codeine"]),
         (
             "amoxicillin trihydrate + clavulanate potassium",
             ["amoxicillin trihydrate", "clavulanate potassium"],
