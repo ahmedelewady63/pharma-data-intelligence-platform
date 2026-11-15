@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from matching.index import RxNormConcept, RxNormIndex, strict_name_key
+from matching.index import RxNormIndex, strict_name_key
 from matching.scoring import LEVEL_PRIORITY, TTY_LEVEL, TTY_PRIORITY, exact_score
 
 
