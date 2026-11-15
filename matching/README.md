@@ -1,21 +1,8 @@
-# Drug matching (M2)
+# matching (Member 2)
 
-M2 owns this folder. The matcher will be a reusable library used by batch and streaming.
-It will preserve the original drug name, return a confidence score and human-readable
-evidence, distinguish ingredient-level from product-level results, and keep uncertain
-records for review.
+Drug Matching Engine: normalization, candidate generation, matching, evidence and confidence.
 
-## Work order
-
-1. Name normalizer, using real examples from `data/sample/`.
-2. Multi-ingredient splitting.
-3. Exact RxNorm matching.
-4. Brand-to-ingredient relations (after verifying relation direction on a real row).
-5. Candidate-reduced fuzzy fallback.
-6. US product matching by NDC.
-7. Optional Egyptian product matching.
-8. Matcher class and batch outputs.
-9. Human-reviewed golden set and evaluation.
-
-Exact input and output columns must come from the approved `contracts/contracts.yaml`.
-Do not download raw data; M1 owns ingestion. RxNorm data must not be redistributed publicly.
+- Input: `stg_faers_drug`, `stg_ndc_*`, `stg_rxnorm_*`, `stg_eg_product`, `stg_nadac`.
+- Output: `match_drug`, `match_product_us`, `match_product_eg` (see contracts) and the `DrugMatcher` interface in `common/interfaces.py`.
+- Golden set and evaluation report live here.
+- Run and tests: add exact commands here.

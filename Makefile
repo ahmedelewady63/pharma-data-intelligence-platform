@@ -1,19 +1,16 @@
-SHELL := /bin/sh
-PYTHON ?= python
-
-.PHONY: setup format lint test
+.PHONY: setup lint format test
+# On Windows run these commands directly in a terminal if `make` is not installed.
 
 setup:
-	$(PYTHON) -m pip install -r requirements-dev.txt
+	python -m pip install -r requirements-dev.txt
 	pre-commit install
-
-format:
-	ruff check --fix .
-	ruff format .
 
 lint:
 	ruff check .
 	ruff format --check .
 
+format:
+	ruff format .
+
 test:
-	pytest
+	pytest -q

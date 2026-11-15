@@ -1,134 +1,125 @@
-"""Stable interfaces shared by matching, validation, and streaming components."""
+"""Shared interfaces between components.
+
+Members 5 and 6 can build against the Mock* classes from day one, so nobody waits for the
+real Drug Matching Engine (member 2) or DataGuard (member 3). The real implementations must
+keep these signatures. Change them only through a contracts PR.
+
+The neutral batch format is a list of plain dicts, so the same code works in pandas, Spark
+(mapInPandas / foreachBatch) and unit tests.
+"""
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, field
-from typing import Any, Protocol
+from dataclasses import dataclass
+from enum import Enum
+from typing import Any, Protocol, Sequence
+
+
+class MatchStatus(str, Enum):
+    MATCHED = "MATCHED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+    UNMATCHED = "UNMATCHED"
+    CONFLICT = "CONFLICT"
+
+
+class QualityStatus(str, Enum):
+    ACCEPTED = "ACCEPTED"
+    REJECTED = "REJECTED"
+    NEEDS_REVIEW = "NEEDS_REVIEW"
+
+
+@dataclass(frozen=True)
+class Evidence:
+    rule: str
+    detail: str
+    score: float | None = None
 
 
 @dataclass(frozen=True)
 class MatchResult:
-    """One explainable drug match returned by the matcher."""
-
-    record_id: str
-    status: str
-    rxcui: str | None
-    match_method: str
-    confidence: float
-    evidence: tuple[Mapping[str, Any], ...] = field(default_factory=tuple)
-    match_level: str | None = None
-    reason: str | None = None
+    original_record_id: str
+    original_drug_name: str | None
+    matched_drug_id: str | None  # RxNorm RXCUI when matched
+    match_status: MatchStatus
+    confidence_score: float  # 0.0 to 1.0
+    matching_evidence: tuple[Evidence, ...] = ()
+    reference_source: str | None = None  # e.g. RXNORM, NDC, EDA
 
 
 @dataclass(frozen=True)
-class ValidationIssue:
-    """A single validation finding."""
-
+class Issue:
     rule_id: str
     field: str | None
-    reason: str
-    severity: str
+    message: str
+    severity: str = "error"  # error | warning
 
 
 @dataclass(frozen=True)
 class ValidationResult:
-    """Validation status and findings for one record."""
-
     record_id: str
-    status: str
-    issues: tuple[ValidationIssue, ...] = field(default_factory=tuple)
-    score_quality: float = 100.0
+    status: QualityStatus
+    issues: tuple[Issue, ...] = ()
+    quality_score: float | None = None  # 0 to 100, formula documented by member 3
 
 
 class DrugMatcher(Protocol):
-    """Interface implemented by both the mock and production matcher."""
+    def match(self, record: dict[str, Any]) -> MatchResult: ...
 
-    def match(self, record: Mapping[str, Any]) -> MatchResult:
-        """Match one input record."""
-
-    def match_batch(self, records: Iterable[Mapping[str, Any]]) -> list[MatchResult]:
-        """Match multiple records in input order."""
+    def match_batch(self, records: Sequence[dict[str, Any]]) -> list[MatchResult]: ...
 
 
 class DataGuard(Protocol):
-    """Interface implemented by both the mock and production validator."""
-
-    def validate(self, record: Mapping[str, Any], source: str) -> ValidationResult:
-        """Validate one input record."""
+    def validate(self, record: dict[str, Any], source: str) -> ValidationResult: ...
 
     def validate_batch(
-        self, records: Iterable[Mapping[str, Any]], source: str
-    ) -> list[ValidationResult]:
-        """Validate multiple records in input order."""
+        self, records: Sequence[dict[str, Any]], source: str
+    ) -> list[ValidationResult]: ...
 
 
-def record_id(record: Mapping[str, Any]) -> str:
-    """Return the primary FAERS identifier or streaming event identifier."""
-    value = record.get("primaryid") or record.get("event_id")
-    if value is None or str(value).strip() == "":
-        raise ValueError("record must contain a non-empty primaryid or event_id")
-    return str(value)
+def record_id(record: dict[str, Any]) -> str:
+    return str(record.get("event_id") or record.get("primaryid") or "")
 
 
 class MockDrugMatcher:
-    """Safe placeholder that preserves records as unmatched until M2 lands."""
+    """Always UNMATCHED. Replace with the real engine at integration time."""
 
-    def match(self, record: Mapping[str, Any]) -> MatchResult:
-        key = record_id(record)
+    def match(self, record: dict[str, Any]) -> MatchResult:
         return MatchResult(
-            record_id=key,
-            status="UNMATCHED",
-            rxcui=None,
-            match_method="none",
-            confidence=0.0,
-            evidence=(
-                {
-                    "step": 1,
-                    "rule": "mock_unmatched",
-                    "detail": "Production matching is not connected yet.",
-                    "score": 0.0,
-                    "rxcui": None,
-                },
-            ),
-            reason="mock_matcher",
+            original_record_id=record_id(record),
+            original_drug_name=record.get("drugname"),
+            matched_drug_id=None,
+            match_status=MatchStatus.UNMATCHED,
+            confidence_score=0.0,
+            matching_evidence=(Evidence("mock", "MockDrugMatcher: no matching performed"),),
+            reference_source=None,
         )
 
-    def match_batch(self, records: Iterable[Mapping[str, Any]]) -> list[MatchResult]:
-        return [self.match(record) for record in records]
+    def match_batch(self, records: Sequence[dict[str, Any]]) -> list[MatchResult]:
+        return [self.match(r) for r in records]
 
 
 class MockDataGuard:
-    """Basic placeholder that rejects records missing primaryid or drugname."""
+    """Rejects records missing required fields, accepts everything else."""
 
-    def validate(self, record: Mapping[str, Any], source: str) -> ValidationResult:
-        try:
-            key = record_id(record)
-        except ValueError:
-            key = ""
+    REQUIRED = {"faers": ("primaryid", "drug_seq", "drugname")}
+    DEFAULT_REQUIRED = ("primaryid", "drugname")
 
-        missing = [
-            field_name
-            for field_name in ("primaryid", "drugname")
-            if record.get(field_name) is None or str(record.get(field_name)).strip() == ""
-        ]
+    def validate(self, record: dict[str, Any], source: str) -> ValidationResult:
+        required = self.REQUIRED.get(source.lower(), self.DEFAULT_REQUIRED)
         issues = tuple(
-            ValidationIssue(
-                rule_id=f"mock_required_{field_name}",
-                field=field_name,
-                reason=f"Required field {field_name} is missing.",
-                severity="error",
-            )
-            for field_name in missing
+            Issue("required_field", f, f"{f} is required")
+            for f in required
+            if record.get(f) in (None, "")
         )
+        status = QualityStatus.REJECTED if issues else QualityStatus.ACCEPTED
         return ValidationResult(
-            record_id=key,
-            status="REJECTED" if issues else "ACCEPTED",
+            record_id=record_id(record),
+            status=status,
             issues=issues,
-            score_quality=0.0 if issues else 100.0,
+            quality_score=0.0 if issues else 100.0,
         )
 
     def validate_batch(
-        self, records: Iterable[Mapping[str, Any]], source: str
+        self, records: Sequence[dict[str, Any]], source: str
     ) -> list[ValidationResult]:
-        return [self.validate(record, source) for record in records]
+        return [self.validate(r, source) for r in records]

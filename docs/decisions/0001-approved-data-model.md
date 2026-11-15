@@ -1,18 +1,24 @@
-# ADR 0001: Approved analytical model
+# ADR 0001: Approved data model
 
-- Status: approved in the integrated project proposal.
-- Owner: project owner and M6.
-- Scope: 5 fact tables and 16 dimension tables for the warehouse.
-- FAERS facts remain separate at report-drug, report-reaction, and report-outcome grain.
-  Never join those facts on `primaryid` alone.
-- The two price facts are NADAC price and Egyptian price. Keep currencies separate.
-- Product NDC and package NDC remain distinct; NDC values are text with 11 digits.
-- Every dimension has an Unknown member with key `-1`; unmatched references are retained.
-- `contracts/contracts.yaml` will contain the authoritative column names and types.
+Status: accepted (the project owner approves any change).
 
-## Decisions still requiring owner and consumer review
+## Decision
+Constellation of 5 facts and 16 dimensions (see the model diagram and `contracts/contracts.yaml`):
 
-- Surrogate key representation and collision handling (proposal D4).
-- DataGuard status and score thresholds (proposal D5).
-- Exact staging and match table column/type contracts.
-- Event schema v1, to be reviewed by M1, M4, and M5 before it is frozen.
+- Report-level facts: `fact_report_drug` (report x drug_seq), `fact_report_reaction` (report x reaction),
+  `fact_report_outcome` (report x outcome). Report-level foreign keys (patient, sex, event date, FDA date, reporter country,
+  occurrence country) live in `dim_report`.
+- `fact_nadac_price` (ndc x effective_date) and `fact_eg_price` (one Egyptian product).
+- `dim_rxnorm` is the hub: `dim_drug`, `dim_product_us`, `dim_product_eg` point to it; `dim_rxnorm_ndc` and
+  `dim_rxnorm_relation` hang off it; `dim_product_nadac` points to `dim_rxnorm_ndc`.
+- `dim_date` and `dim_country` are role-playing (event, fda, effective, generic_effective; reporter, occurrence).
+- Surrogate keys are generated in dbt from natural keys (deterministic). Every dimension has an Unknown row (-1).
+
+## Why
+A single fact joining drug, reaction and outcome produces 1,410,605,699 rows against 65,793,698 drug rows
+and repeats `dose_amt` 21x. Three facts at their natural grain avoid it. Count reports with `COUNT(DISTINCT report_key)`.
+
+## Follow-ups
+- The model picture says "4 facts" but shows 5. Fix the subtitle.
+- Use snake_case in the NADAC boxes (`ndc_description`, `pricing_unit`, `nadac_per_unit` ...).
+- Optional: add `package_us_key` to `dim_product_nadac` to link NADAC straight to `dim_package_us`.
