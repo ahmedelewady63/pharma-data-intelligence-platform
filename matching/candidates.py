@@ -21,9 +21,7 @@ class ExactCandidate:
     evidence: tuple[dict[str, object], ...]
 
 
-def generate_exact_candidates(
-    value: str | None, index: RxNormIndex
-) -> list[ExactCandidate]:
+def generate_exact_candidates(value: str | None, index: RxNormIndex) -> list[ExactCandidate]:
     """Return every strict RxNorm STR match in deterministic tie-break order.
 
     Strength, dosage-form, route, and punctuation details are retained by the strict
@@ -37,10 +35,7 @@ def generate_exact_candidates(
     for concept in index.lookup_exact(value):
         score = exact_score(concept.tty)
         level = TTY_LEVEL[concept.tty]
-        detail = (
-            f"strict name key {key!r} exactly matches RxNorm STR "
-            f"(TTY={concept.tty})"
-        )
+        detail = f"strict name key {key!r} exactly matches RxNorm STR (TTY={concept.tty})"
         if level == "brand":
             detail += "; brand-to-ingredient relation not inferred"
 
