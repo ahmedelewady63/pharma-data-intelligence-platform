@@ -1,20 +1,30 @@
-# Shared enumerations. Changes require an owner-led contracts PR and consumer review.
-matching_status:
+# Single source of truth for status values. Code must import/validate against these.
+match_status:      # produced by the Drug Matching Engine (member 2)
   - MATCHED
   - NEEDS_REVIEW
   - UNMATCHED
   - CONFLICT
-
-data_quality_status:
+quality_status:    # produced by DataGuard (member 3)
   - ACCEPTED
   - REJECTED
   - NEEDS_REVIEW
-
-match_method:
-  - exact
-  - brand_to_ingredient
-  - ndc
-  - fuzzy
-  - none
-  - ingredient # Egyptian catalog only
-  - set_ingredient # Egyptian catalog only
+issue_severity:
+  - error
+  - warning
+faers_role_cod:
+  PS: primary suspect
+  SS: secondary suspect
+  C: concomitant
+  I: interacting
+faers_outc_cod:
+  DE: death
+  LT: life-threatening
+  HO: hospitalization
+  DS: disability
+  CA: congenital anomaly
+  RI: required intervention
+  OT: other serious
+nadac_pricing_unit:
+  - EA   # each
+  - ML   # milliliter
+  - GM   # gram
