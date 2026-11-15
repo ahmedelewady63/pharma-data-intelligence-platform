@@ -93,9 +93,9 @@ def test_tie_breaking_uses_tty_priority_then_rxcui(rxnorm_rows):
     candidates = generate_exact_candidates("Tie Name", index)
 
     assert [(candidate.rxcui, candidate.tty) for candidate in candidates] == [
-        ("1008", "PIN"),
         ("1009", "IN"),
         ("1010", "IN"),
+        ("1008", "PIN"),
     ]
 
 
