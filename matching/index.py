@@ -42,25 +42,17 @@ class RxNormIndex:
         for row_number, row in enumerate(rows, start=1):
             missing = [column for column in _REQUIRED_COLUMNS if column not in row]
             if missing:
-                raise ValueError(
-                    f"RxNorm row {row_number} is missing contract columns: {missing}"
-                )
+                raise ValueError(f"RxNorm row {row_number} is missing contract columns: {missing}")
 
             rxcui = str(row["RXCUI"]).strip()
             sab = str(row["SAB"]).strip().upper()
             tty = str(row["TTY"]).strip().upper()
             str_text = str(row["STR"]).strip()
             suppress_value = row["SUPPRESS"]
-            suppress = (
-                str(suppress_value).strip().upper()
-                if suppress_value is not None
-                else None
-            )
+            suppress = str(suppress_value).strip().upper() if suppress_value is not None else None
 
             if not rxcui or not str_text:
-                raise ValueError(
-                    f"RxNorm row {row_number} has an empty RXCUI or STR"
-                )
+                raise ValueError(f"RxNorm row {row_number} has an empty RXCUI or STR")
             if sab != "RXNORM" or tty not in ALLOWED_TTYS or suppress != "N":
                 continue
 
