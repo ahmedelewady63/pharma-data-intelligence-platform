@@ -20,9 +20,7 @@ def _concept(rxcui: str, tty: str, term: str) -> dict[str, str]:
     }
 
 
-def _relation(
-    rxcui1: str, rel: str, rxcui2: str, rela: str
-) -> dict[str, str]:
+def _relation(rxcui1: str, rel: str, rxcui2: str, rela: str) -> dict[str, str]:
     return {
         "RXCUI1": rxcui1,
         "REL": rel,
@@ -59,9 +57,7 @@ def _index() -> RxNormIndex:
 def test_brand_relation_supports_brand_on_rxcui1():
     candidates = generate_brand_candidates("Parlodel", _index())
 
-    assert [(item.rxcui, item.str_text) for item in candidates] == [
-        ("1760", "bromocriptine")
-    ]
+    assert [(item.rxcui, item.str_text) for item in candidates] == [("1760", "bromocriptine")]
     assert candidates[0].match_method == "brand_to_ingredient"
     assert candidates[0].match_level == "ingredient"
     assert candidates[0].score == 0.90
