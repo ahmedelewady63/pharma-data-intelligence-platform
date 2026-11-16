@@ -80,9 +80,7 @@ def generate_exact_candidates(value: str | None, index: RxNormIndex) -> list[Exa
 
 
 
-def generate_brand_candidates(
-    value: str | None, index: RxNormIndex
-) -> list[ExactCandidate]:
+def generate_brand_candidates(value: str | None, index: RxNormIndex) -> list[ExactCandidate]:
     """Map an exact BN term to linked IN concepts with relation evidence.
 
     The endpoint TTYs identify the brand and ingredient roles because real RxNorm
