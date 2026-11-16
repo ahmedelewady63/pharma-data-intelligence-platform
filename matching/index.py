@@ -11,6 +11,8 @@ from matching.scoring import ALLOWED_TTYS, TTY_PRIORITY
 
 _SPACE_RE = re.compile(r"\s+")
 _REQUIRED_COLUMNS = ("RXCUI", "SAB", "TTY", "STR", "SUPPRESS")
+_RELATION_COLUMNS = ("RXCUI1", "REL", "RXCUI2", "RELA", "SAB")
+_BRAND_RELATIONS = frozenset({"HAS_TRADENAME", "TRADENAME_OF"})
 
 
 @dataclass(frozen=True, slots=True)
@@ -31,10 +33,25 @@ def strict_name_key(value: str | None) -> str:
     return _SPACE_RE.sub(" ", fold_unicode(value)).strip()
 
 
-class RxNormIndex:
-    """Build a picklable exact-name index from stg_rxnorm_concept rows once."""
+@dataclass(frozen=True, slots=True)
+class BrandIngredientRelation:
+    """One contract relation connecting a BN concept to an IN concept."""
 
-    def __init__(self, rows: Iterable[Mapping[str, object]]) -> None:
+    ingredient: RxNormConcept
+    rxcui1: str
+    rel: str | None
+    rxcui2: str
+    rela: str | None
+
+
+class RxNormIndex:
+    """Build picklable name and brand relation indexes from staging rows once."""
+
+    def __init__(
+        self,
+        rows: Iterable[Mapping[str, object]],
+        relations: Iterable[Mapping[str, object]] = (),
+    ) -> None:
         by_name: dict[str, list[RxNormConcept]] = {}
         concepts: list[RxNormConcept] = []
         seen: set[tuple[str, str, str]] = set()
@@ -99,6 +116,73 @@ class RxNormIndex:
                 ),
             )
         )
+        concepts_by_rxcui: dict[str, list[RxNormConcept]] = {}
+        for concept in self.concepts:
+            concepts_by_rxcui.setdefault(concept.rxcui, []).append(concept)
+
+        brand_links: dict[str, list[BrandIngredientRelation]] = {}
+        seen_relations: set[tuple[str, str, str, str]] = set()
+        for row_number, row in enumerate(relations, start=1):
+            missing = [column for column in _RELATION_COLUMNS if column not in row]
+            if missing:
+                raise ValueError(
+                    f"RxNorm relation row {row_number} is missing contract columns: {missing}"
+                )
+            if str(row["SAB"]).strip().upper() != "RXNORM":
+                continue
+
+            rela_value = row["RELA"]
+            rela = str(rela_value).strip().upper() if rela_value is not None else None
+            if rela not in _BRAND_RELATIONS:
+                continue
+
+            rxcui1 = str(row["RXCUI1"]).strip()
+            rxcui2 = str(row["RXCUI2"]).strip()
+            rel_value = row["REL"]
+            rel = str(rel_value).strip().upper() if rel_value is not None else None
+            left = concepts_by_rxcui.get(rxcui1, ())
+            right = concepts_by_rxcui.get(rxcui2, ())
+
+            for left_concept in left:
+                for right_concept in right:
+                    if left_concept.tty == "BN" and right_concept.tty == "IN":
+                        brand, ingredient = left_concept, right_concept
+                    elif left_concept.tty == "IN" and right_concept.tty == "BN":
+                        brand, ingredient = right_concept, left_concept
+                    else:
+                        continue
+
+                    relation_key = (brand.rxcui, ingredient.rxcui, rela, rel or "")
+                    if relation_key in seen_relations:
+                        continue
+                    seen_relations.add(relation_key)
+                    brand_links.setdefault(brand.rxcui, []).append(
+                        BrandIngredientRelation(
+                            ingredient=ingredient,
+                            rxcui1=rxcui1,
+                            rel=rel,
+                            rxcui2=rxcui2,
+                            rela=rela,
+                        )
+                    )
+
+        self.brand_to_ingredients = {
+            rxcui: tuple(
+                sorted(
+                    links,
+                    key=lambda link: (
+                        link.ingredient.rxcui,
+                        link.ingredient.str_text.casefold(),
+                        link.ingredient.str_text,
+                        link.rela or "",
+                        link.rel or "",
+                        link.rxcui1,
+                        link.rxcui2,
+                    ),
+                )
+            )
+            for rxcui, links in sorted(brand_links.items())
+        }
 
     def lookup_exact(self, value: str | None) -> tuple[RxNormConcept, ...]:
         """Return eligible concepts whose strict name key exactly matches value."""
