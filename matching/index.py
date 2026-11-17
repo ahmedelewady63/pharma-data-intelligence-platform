@@ -129,9 +129,7 @@ class RxNormIndex:
         self.fuzzy_by_first_char = {
             key: tuple(values) for key, values in sorted(by_first_char.items())
         }
-        self.fuzzy_by_ngram = {
-            key: tuple(values) for key, values in sorted(by_ngram.items())
-        }
+        self.fuzzy_by_ngram = {key: tuple(values) for key, values in sorted(by_ngram.items())}
         concepts_by_rxcui: dict[str, list[RxNormConcept]] = {}
         for concept in self.concepts:
             concepts_by_rxcui.setdefault(concept.rxcui, []).append(concept)
