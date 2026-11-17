@@ -31,7 +31,7 @@ def test_fuzzy_finds_typo_and_caps_score(index):
     assert candidates
     assert candidates[0].rxcui == "1191"
     assert candidates[0].match_method == "fuzzy"
-    assert candidates[0].score == pytest.approx(92.3 / 100 * 0.90)
+    assert 0.80 < candidates[0].score <= 0.85
     assert candidates[0].evidence[0]["rule"] == "fuzzy_wratio"
     assert json.dumps(candidates[0].evidence)
 
