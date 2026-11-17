@@ -42,7 +42,7 @@ def generate_fuzzy_candidates(
     )
     output: list[ExactCandidate] = []
     seen: set[tuple[str, str]] = set()
-    for term, ratio, position in scored:
+    for _term, ratio, position in scored:
         concept = concepts[position]
         identity = (concept.rxcui, concept.tty)
         if identity in seen:
