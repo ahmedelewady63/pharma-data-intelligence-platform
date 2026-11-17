@@ -9,9 +9,7 @@ from matching.fuzzy import generate_fuzzy_candidates
 from matching.index import RxNormIndex
 
 
-def benchmark_names_per_second(
-    names: Iterable[str], index: RxNormIndex
-) -> tuple[int, float]:
+def benchmark_names_per_second(names: Iterable[str], index: RxNormIndex) -> tuple[int, float]:
     """Return the number of names processed and fuzzy lookups per second."""
     name_list = list(names)
     if not name_list:
