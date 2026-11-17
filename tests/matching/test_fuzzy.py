@@ -41,7 +41,10 @@ def test_fuzzy_is_deterministic_and_preserves_product_level(index):
     second = generate_fuzzy_candidates("aspirin 325 MG Oral Tabl", index)
 
     assert first == second
-    assert any(candidate.rxcui == "2001" and candidate.match_level == "product" for candidate in first)
+    assert any(
+        candidate.rxcui == "2001" and candidate.match_level == "product"
+        for candidate in first
+    )
 
 
 def test_fuzzy_threshold_is_configurable(index):
