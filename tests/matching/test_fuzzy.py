@@ -42,8 +42,7 @@ def test_fuzzy_is_deterministic_and_preserves_product_level(index):
 
     assert first == second
     assert any(
-        candidate.rxcui == "2001" and candidate.match_level == "product"
-        for candidate in first
+        candidate.rxcui == "2001" and candidate.match_level == "product" for candidate in first
     )
 
 
@@ -68,9 +67,7 @@ def test_index_blocks_against_a_reduced_bucket():
         }
         for i in range(100)
     ]
-    rows.append(
-        {"RXCUI": "999", "SAB": "RXNORM", "TTY": "IN", "STR": "aspirin", "SUPPRESS": "N"}
-    )
+    rows.append({"RXCUI": "999", "SAB": "RXNORM", "TTY": "IN", "STR": "aspirin", "SUPPRESS": "N"})
     index = RxNormIndex(rows)
 
     assert len(index.lookup_fuzzy("asprin")) < len(index.concepts)
