@@ -10,6 +10,7 @@ from matching.normalize import fold_unicode
 from matching.scoring import ALLOWED_TTYS, TTY_PRIORITY
 
 _SPACE_RE = re.compile(r"\s+")
+_NGRAM_SIZE = 3
 _REQUIRED_COLUMNS = ("RXCUI", "SAB", "TTY", "STR", "SUPPRESS")
 _RELATION_COLUMNS = ("RXCUI1", "REL", "RXCUI2", "RELA", "SAB")
 _BRAND_RELATIONS = frozenset({"HAS_TRADENAME", "TRADENAME_OF"})
@@ -116,6 +117,19 @@ class RxNormIndex:
                 ),
             )
         )
+        by_first_char: dict[str, list[RxNormConcept]] = {}
+        by_ngram: dict[str, list[RxNormConcept]] = {}
+        for concept in self.concepts:
+            key = strict_name_key(concept.str_text)
+            compact = re.sub(r"[^A-Z0-9]", "", key)
+            if compact:
+                by_first_char.setdefault(compact[0], []).append(concept)
+            for ngram in self._char_ngrams(compact):
+                by_ngram.setdefault(ngram, []).append(concept)
+        self.fuzzy_by_first_char = {
+            key: tuple(values) for key, values in sorted(by_first_char.items())
+        }
+        self.fuzzy_by_ngram = {key: tuple(values) for key, values in sorted(by_ngram.items())}
         concepts_by_rxcui: dict[str, list[RxNormConcept]] = {}
         for concept in self.concepts:
             concepts_by_rxcui.setdefault(concept.rxcui, []).append(concept)
@@ -184,9 +198,50 @@ class RxNormIndex:
             for rxcui, links in sorted(brand_links.items())
         }
 
+    @staticmethod
+    def _char_ngrams(value: str) -> set[str]:
+        if len(value) < _NGRAM_SIZE:
+            return {value} if value else set()
+        return {
+            value[position : position + _NGRAM_SIZE]
+            for position in range(len(value) - _NGRAM_SIZE + 1)
+        }
+
     def lookup_exact(self, value: str | None) -> tuple[RxNormConcept, ...]:
         """Return eligible concepts whose strict name key exactly matches value."""
         key = strict_name_key(value)
         if not key:
             return ()
         return self.name_to_concepts.get(key, ())
+
+    def lookup_fuzzy(self, value: str | None) -> tuple[RxNormConcept, ...]:
+        """Return a deterministic blocking bucket from first character and trigrams."""
+        key = strict_name_key(value)
+        compact = re.sub(r"[^A-Z0-9]", "", key)
+        if not compact:
+            return ()
+
+        bucket = set(self.fuzzy_by_first_char.get(compact[0], ()))
+        for ngram in self._char_ngrams(compact):
+            bucket.update(self.fuzzy_by_ngram.get(ngram, ()))
+
+        min_length = max(1, int(len(compact) * 0.60))
+        max_length = max(min_length, int(len(compact) / 0.60) + 1)
+        filtered = [
+            concept
+            for concept in bucket
+            if min_length
+            <= len(re.sub(r"[^A-Z0-9]", "", strict_name_key(concept.str_text)))
+            <= max_length
+        ]
+        return tuple(
+            sorted(
+                filtered,
+                key=lambda concept: (
+                    TTY_PRIORITY[concept.tty],
+                    concept.rxcui,
+                    concept.str_text.casefold(),
+                    concept.str_text,
+                ),
+            )
+        )

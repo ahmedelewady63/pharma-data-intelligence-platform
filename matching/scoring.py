@@ -7,6 +7,9 @@ human-reviewed golden set before production thresholds are finalized.
 EXACT_PRODUCT_SCORE = 0.98
 EXACT_INGREDIENT_SCORE = 0.95
 EXACT_BRAND_SCORE = 0.90
+FUZZY_MIN_RATIO = 78.0
+FUZZY_SCORE_SCALE = 0.90
+FUZZY_MAX_SCORE = 0.85
 
 TTY_PRIORITY = {
     "IN": 0,
