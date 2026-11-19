@@ -1,0 +1,46 @@
+# ---- data and artifacts: NEVER commit (FAERS alone is ~15 GB; GitHub rejects files > 100 MB) ----
+data/*
+!data/README.md
+!data/sample/
+*.duckdb
+*.duckdb.wal
+*.zip
+*.RRF
+*.parquet
+!data/sample/*.parquet
+!tests/fixtures/**
+
+# ---- secrets ----
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials*.json
+
+# ---- python ----
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# ---- spark / kafka / airflow / dbt runtime ----
+spark-warehouse/
+checkpoints/
+metastore_db/
+derby.log
+kafka-data/
+airflow/logs/
+airflow/airflow.db
+target/
+dbt_packages/
+logs/
+
+# ---- editors / OS ----
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

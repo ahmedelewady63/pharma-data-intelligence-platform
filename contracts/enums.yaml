@@ -1,0 +1,30 @@
+# Single source of truth for status values. Code must import/validate against these.
+match_status:      # produced by the Drug Matching Engine (member 2)
+  - MATCHED
+  - NEEDS_REVIEW
+  - UNMATCHED
+  - CONFLICT
+quality_status:    # produced by DataGuard (member 3)
+  - ACCEPTED
+  - REJECTED
+  - NEEDS_REVIEW
+issue_severity:
+  - error
+  - warning
+faers_role_cod:
+  PS: primary suspect
+  SS: secondary suspect
+  C: concomitant
+  I: interacting
+faers_outc_cod:
+  DE: death
+  LT: life-threatening
+  HO: hospitalization
+  DS: disability
+  CA: congenital anomaly
+  RI: required intervention
+  OT: other serious
+nadac_pricing_unit:
+  - EA   # each
+  - ML   # milliliter
+  - GM   # gram

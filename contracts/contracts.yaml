@@ -1,0 +1,332 @@
+# contracts.yaml  (v3: adds NADAC)
+# عقود الجداول بين الأعضاء الستة. كل واحد بيقرأ الجداول اللي قبله ويكتب جداوله بنفس الأعمدة بالظبط،
+# ولحد ما اللي قبله يخلّص بيشتغل على stub بنفس الشكل (من عينة الداتا).
+#
+# القواعد:
+#  - أسماء الأعمدة هي الأسماء الأصلية في ملفات المصدر، ما عدا: *_key و full_date و country_code.
+#  - الـ *_key بيتولّد في dbt (surrogate). الأنواع تقريبية، وأي تعديل بيتم بالاتفاق.
+#  - nullable: false معناها ممنوع NULL (DataGuard بيفحصها).
+#  - الأرقام في الـ notes من الفحص على الداتا الحقيقية، وقبل إزالة النسخ القديمة من كل caseid.
+
+version: 3
+
+# ------------------------------------------------------------------
+# 1) مخرجات Member 1: FAERS staging
+# ------------------------------------------------------------------
+staging_faers:
+  stg_faers_demo:
+    owner: member_1
+    grain: one row per caseid (latest caseversion only)
+    columns:
+      - {name: primaryid,        type: varchar, nullable: false, note: "unique after dedupe"}
+      - {name: caseid,           type: varchar, nullable: false}
+      - {name: caseversion,      type: integer, nullable: false}
+      - {name: event_dt,         type: date,    nullable: true,  note: "partial dates (year or year-month) become NULL or first day"}
+      - {name: fda_dt,           type: date,    nullable: false}
+      - {name: age,              type: double,  nullable: true,  note: "converted to years using age_cod; impossible values (>120) set to NULL"}
+      - {name: age_cod,          type: varchar, nullable: true,  note: "original unit kept for lineage"}
+      - {name: sex,              type: varchar, nullable: true,  note: "F, M, UNK, NS"}
+      - {name: occp_cod,         type: varchar, nullable: true}
+      - {name: reporter_country, type: varchar, nullable: true}
+      - {name: occr_country,     type: varchar, nullable: true}
+
+  stg_faers_drug:
+    owner: member_1
+    grain: one row per primaryid x drug_seq (the same drug can repeat with different drug_seq)
+    rows_raw: 65793698
+    columns:
+      - {name: primaryid, type: varchar, nullable: false, note: "only reports kept in stg_faers_demo"}
+      - {name: drug_seq,  type: integer, nullable: false}
+      - {name: role_cod,  type: varchar, nullable: true,  note: "PS, SS, C, I"}
+      - {name: drugname,  type: varchar, nullable: true,  note: "trimmed, upper-cased, trailing punctuation removed"}
+      - {name: prod_ai,   type: varchar, nullable: true,  note: "multi-ingredient values (about 6.6% of rows) keep the raw separator; splitting is track 3's job"}
+      - {name: route,     type: varchar, nullable: true}
+      - {name: nda_num,   type: varchar, nullable: true}
+      - {name: dose_amt,  type: double,  nullable: true}
+      - {name: dose_unit, type: varchar, nullable: true}
+      - {name: dose_form, type: varchar, nullable: true}
+      - {name: dose_freq, type: varchar, nullable: true}
+
+  stg_faers_reac:
+    owner: member_1
+    grain: one row per primaryid x pt
+    rows_raw: 50077984
+    columns:
+      - {name: primaryid, type: varchar, nullable: false}
+      - {name: pt,        type: varchar, nullable: false}
+
+  stg_faers_outc:
+    owner: member_1
+    grain: one row per primaryid x outc_cod (about 58% of reports have at least one)
+    rows_raw: 11315827
+    columns:
+      - {name: primaryid, type: varchar, nullable: false}
+      - {name: outc_cod,  type: varchar, nullable: false, note: "DE, LT, HO, DS, CA, RI, OT"}
+
+# ------------------------------------------------------------------
+# 2) مخرجات Member 1: Reference staging (RxNorm, NDC, NADAC, Egypt)
+# ------------------------------------------------------------------
+staging_reference:
+  stg_rxnorm_concept:
+    owner: member_1
+    filter: "SAB = 'RXNORM' and LAT = 'ENG'"
+    columns:
+      - {name: RXCUI,    type: varchar, nullable: false}
+      - {name: SAB,      type: varchar, nullable: false}
+      - {name: TTY,      type: varchar, nullable: false, note: "IN, PIN, MIN, BN, SCD, SBD"}
+      - {name: STR,      type: varchar, nullable: false}
+      - {name: SUPPRESS, type: varchar, nullable: true}
+
+  stg_rxnorm_ndc:
+    owner: member_1
+    filter: "ATN = 'NDC'"
+    columns:
+      - {name: RXCUI, type: varchar, nullable: false}
+      - {name: ATN,   type: varchar, nullable: false}
+      - {name: SAB,   type: varchar, nullable: false}
+      - {name: ATV,   type: varchar, nullable: false, note: "NDC code, 11 digits without dashes"}
+
+  stg_rxnorm_relation:
+    owner: member_1
+    columns:
+      - {name: RXCUI1, type: varchar, nullable: false}
+      - {name: REL,    type: varchar, nullable: true}
+      - {name: RXCUI2, type: varchar, nullable: false}
+      - {name: RELA,   type: varchar, nullable: true, note: "direction is RXCUI2 relative to RXCUI1; verify on a real row"}
+      - {name: SAB,    type: varchar, nullable: true}
+
+  stg_ndc_product:
+    owner: member_1
+    filter: "human drugs only; ndc_exclude_flag != 'Y'"
+    columns:
+      - {name: productndc,                type: varchar, nullable: false, note: "unique"}
+      - {name: proprietaryname,           type: varchar, nullable: true}
+      - {name: nonproprietaryname,        type: varchar, nullable: true}
+      - {name: dosageformname,            type: varchar, nullable: true}
+      - {name: routename,                 type: varchar, nullable: true}
+      - {name: marketingcategoryname,     type: varchar, nullable: true}
+      - {name: applicationnumber,         type: varchar, nullable: true}
+      - {name: labelername,               type: varchar, nullable: true}
+      - {name: substancename,             type: varchar, nullable: true, note: "multi-ingredient separated by ;"}
+      - {name: active_numerator_strength, type: varchar, nullable: true, note: "can hold several values for combinations"}
+      - {name: active_ingred_unit,        type: varchar, nullable: true}
+      - {name: pharm_classes,             type: varchar, nullable: true}
+
+  stg_ndc_package:
+    owner: member_1
+    filter: "ndc_exclude_flag != 'Y' and sample_package != 'Y'"
+    columns:
+      - {name: productndc,         type: varchar, nullable: false}
+      - {name: ndcpackagecode,     type: varchar, nullable: false, note: "dashed (labeler-product-package); the 11-digit form is derived when matching to ATV"}
+      - {name: packagedescription, type: varchar, nullable: true}
+
+  stg_eg_product:
+    owner: member_1
+    columns:
+      - {name: commercial_name_en, type: varchar, nullable: false}
+      - {name: scientific_name,    type: varchar, nullable: true, note: "combinations separated by +"}
+      - {name: manufacturer,       type: varchar, nullable: true}
+      - {name: drug_class,         type: varchar, nullable: true}
+      - {name: route,              type: varchar, nullable: true}
+      - {name: price_egp,          type: double,  nullable: true, note: "empty values stay NULL"}
+
+  stg_nadac:
+    owner: member_1
+    source: "CMS NADAC (National Average Drug Acquisition Cost), CSV, 12 columns, one file per year"
+    grain: one row per ndc x effective_date (latest as_of_date kept when weekly files repeat the same rate)
+    columns:
+      - {name: ndc,                                      type: varchar, nullable: false, note: "11 digits, read as TEXT, left-pad with zeros"}
+      - {name: ndc_description,                          type: varchar, nullable: true}
+      - {name: nadac_per_unit,                           type: double,  nullable: false, note: "USD per pricing unit"}
+      - {name: effective_date,                           type: date,    nullable: false, note: "source format M/D/YYYY"}
+      - {name: pricing_unit,                             type: varchar, nullable: true,  note: "EA, ML, GM"}
+      - {name: pharmacy_type_indicator,                  type: varchar, nullable: true,  note: "expected constant C/I; confirm in profiling"}
+      - {name: otc,                                      type: varchar, nullable: true,  note: "Y or N"}
+      - {name: explanation_code,                         type: varchar, nullable: true,  note: "may hold several codes in one cell; keep as text"}
+      - {name: classification_for_rate_setting,          type: varchar, nullable: true,  note: "B or G (confirm other values in profiling)"}
+      - {name: corresponding_generic_drug_nadac_per_unit, type: double, nullable: true, note: "empty when not applicable (e.g. class G)"}
+      - {name: corresponding_generic_drug_effective_date, type: date,   nullable: true}
+      - {name: as_of_date,                               type: date,    nullable: false, note: "used only for dedupe; not loaded into the model"}
+
+# ------------------------------------------------------------------
+# 3) مخرجات Member 2: Matching (جداول داخلية، مش جزء من الـ star schema)
+#    أعمدة method و score للمتابعة والـ DataGuard بس، وما بتدخلش الموديل.
+# ------------------------------------------------------------------
+matching:
+  match_drug:
+    owner: member_2
+    grain: one row per distinct (drugname, prod_ai) from stg_faers_drug
+    columns:
+      - {name: drugname,     type: varchar, nullable: true}
+      - {name: prod_ai,      type: varchar, nullable: true}
+      - {name: RXCUI,        type: varchar, nullable: true, note: "NULL = Unknown"}
+      - {name: match_method, type: varchar, nullable: false, note: "exact, brand_to_ingredient, fuzzy, none"}
+      - {name: match_score,  type: double,  nullable: false}
+  match_product_us:
+    owner: member_2
+    grain: one row per productndc
+    columns:
+      - {name: productndc,   type: varchar, nullable: false}
+      - {name: RXCUI,        type: varchar, nullable: true}
+      - {name: match_method, type: varchar, nullable: false, note: "ndc_code, substance, none"}
+      - {name: match_score,  type: double,  nullable: false}
+  match_product_eg:
+    owner: member_2
+    grain: one row per Egyptian product
+    columns:
+      - {name: commercial_name_en, type: varchar, nullable: false}
+      - {name: RXCUI,              type: varchar, nullable: true}
+      - {name: match_method,       type: varchar, nullable: false, note: "ingredient, ingredient_set, fuzzy, none"}
+      - {name: match_score,        type: double,  nullable: false}
+
+# ------------------------------------------------------------------
+# 4) مخرجات Member 6: الموديل النهائي (dbt)
+#    كل Dim فيه صف Unknown بمفتاح -1.
+# ------------------------------------------------------------------
+model:
+  dim_date:
+    note: "role-playing: event, fda, effective, generic_effective"
+    columns: [date_key (pk), full_date (nk)]
+  dim_country:
+    note: "role-playing: reporter and occr"
+    columns: [country_key (pk), country_code (nk)]
+  dim_patient:
+    columns: [patient_key (pk), age (nk), age_cod (nk)]
+  dim_sex:
+    note: "static: loaded once from seed"
+    columns: [sex_key (pk), sex (nk)]
+  dim_report:
+    note: "report header; carries the report-level foreign keys"
+    columns:
+      - report_key (pk)
+      - patient_key (fk -> dim_patient)
+      - sex_key (fk -> dim_sex)
+      - event_date_key (fk -> dim_date)
+      - fda_date_key (fk -> dim_date)
+      - reporter_country_key (fk -> dim_country)
+      - occr_country_key (fk -> dim_country)
+      - primaryid (nk)
+      - caseid
+      - caseversion
+      - occp_cod
+  dim_reaction:
+    columns: [reaction_key (pk), pt (nk)]
+  dim_outcome:
+    columns: [outcome_key (pk), outc_cod (nk)]
+  dim_drug:
+    columns:
+      - drug_key (pk)
+      - rxnorm_key (fk -> dim_rxnorm, Unknown = -1)
+      - drugname (nk)
+      - prod_ai (nk)
+      - route (nk)
+      - nda_num (nk)
+      - dose_unit (nk)
+      - dose_form (nk)
+      - dose_freq (nk)
+  dim_rxnorm:
+    note: "hub: the standard drug"
+    columns: [rxnorm_key (pk), RXCUI (nk), SAB, TTY, STR, SUPPRESS]
+  dim_rxnorm_ndc:
+    columns: [rxnorm_ndc_key (pk), rxnorm_key (fk -> dim_rxnorm), RXCUI (nk), ATN, SAB, ATV (nk)]
+  dim_rxnorm_relation:
+    columns:
+      - rxnorm_relation_key (pk)
+      - rxnorm_key_1 (fk -> dim_rxnorm)
+      - rxnorm_key_2 (fk -> dim_rxnorm)
+      - RXCUI1 (nk)
+      - REL (nk)
+      - RXCUI2 (nk)
+      - RELA (nk)
+      - SAB
+  dim_manufacturer:
+    note: "a row holds the US name or the Egyptian name, not both"
+    columns: [manufacturer_key (pk), labelername (nk), manufacturer (nk)]
+  dim_product_us:
+    columns:
+      - product_us_key (pk)
+      - manufacturer_key (fk -> dim_manufacturer)
+      - rxnorm_key (fk -> dim_rxnorm)
+      - productndc (nk)
+      - proprietaryname
+      - nonproprietaryname
+      - dosageformname
+      - routename
+      - marketingcategoryname
+      - applicationnumber
+      - substancename
+      - active_numerator_strength
+      - active_ingred_unit
+      - pharm_classes
+  dim_package_us:
+    columns: [package_us_key (pk), product_us_key (fk -> dim_product_us), productndc, ndcpackagecode (nk), packagedescription]
+  dim_product_eg:
+    columns:
+      - product_eg_key (pk)
+      - manufacturer_key (fk -> dim_manufacturer)
+      - rxnorm_key (fk -> dim_rxnorm)
+      - commercial_name_en (nk)
+      - scientific_name
+      - drug_class
+      - route
+
+  dim_product_nadac:
+    note: "NADAC product; NDC links to RXNSAT ATV (exact, 11 digits)"
+    columns:
+      - product_nadac_key (pk)
+      - rxnorm_ndc_key (fk -> dim_rxnorm_ndc, Unknown = -1)
+      - ndc (nk)
+      - ndc_description
+      - pricing_unit
+      - otc
+
+  fact_report_drug:
+    grain: one row per report x drug_seq
+    columns:
+      - report_key (fk -> dim_report)
+      - drug_key (fk -> dim_drug)
+      - drug_seq (degenerate)
+      - role_cod (degenerate)
+      - dose_amt (measure)
+  fact_report_reaction:
+    grain: one row per report x reaction
+    columns:
+      - report_key (fk -> dim_report)
+      - reaction_key (fk -> dim_reaction)
+  fact_report_outcome:
+    grain: one row per report x outcome
+    columns:
+      - report_key (fk -> dim_report)
+      - outcome_key (fk -> dim_outcome)
+  fact_eg_price:
+    grain: one row per Egyptian product
+    columns:
+      - product_eg_key (fk -> dim_product_eg)
+      - price_egp (measure)
+
+  fact_nadac_price:
+    grain: one row per ndc x effective_date
+    columns:
+      - product_nadac_key (fk -> dim_product_nadac)
+      - effective_date_key (fk -> dim_date)
+      - generic_effective_date_key (fk -> dim_date)
+      - pharmacy_type_indicator (degenerate)
+      - explanation_code (degenerate)
+      - classification_for_rate_setting (degenerate)
+      - nadac_per_unit (measure)
+      - corresponding_generic_drug_nadac_per_unit (measure)
+
+# ------------------------------------------------------------------
+# 5) فحوصات DataGuard المتفق عليها من الفحص الأول (Member 3)
+# ------------------------------------------------------------------
+dataguard_seed_checks:
+  - "report_key في كل Fact موجود في dim_report (سلامة الربط)"
+  - "عدد التقارير في stg_faers_drug مقابل stg_faers_reac: الفرق كان 3 تقارير (15,008,829 مقابل 15,008,826)"
+  - "تقارير بعدد أدوية غير طبيعي (الأقصى كان 4,113 دواء) وأعراض (الأقصى 611): تتعلّم ولا تتحذف"
+  - "نسبة التقارير اللي ليها outcome (كانت حوالي 58%): مراقبة التغيّر بين الأرباع"
+  - "نسبة prod_ai متعدد المواد (حوالي 6.6% من صفوف DRUG) ونسبة drugname فيه فاصل (حوالي 1.0%، تقدير أعلى لأن / ممكن تكون جزء من الاسم)"
+  - "نسبة المطابقة في match_drug ومعها نسبة Unknown في dim_drug"
+  - "NADAC: ndc بطول 11 رقم وأرقام فقط، و(ndc, effective_date) فريد بعد الـ dedupe"
+  - "NADAC: nadac_per_unit رقم أكبر من صفر، و effective_date <= as_of_date، والتواريخ كلها بتتحوّل (M/D/YYYY)"
+  - "NADAC: pricing_unit من (EA, ML, GM) و otc من (Y, N)، و pharmacy_type_indicator قيمة ثابتة C/I (لو اتأكدت نشيله)"
+  - "NADAC: نسبة ndc الموجودة في RxNorm (ATV) وفي ndc_package بعد توحيد الكود لـ 11 رقم"

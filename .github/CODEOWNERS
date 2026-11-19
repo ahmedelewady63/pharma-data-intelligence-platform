@@ -1,0 +1,11 @@
+# Replace the placeholders with real GitHub usernames.
+# Contracts and shared code need the project owner AND the affected members.
+/contracts/   @project-owner
+/common/      @project-owner
+/docs/        @project-owner
+/ingestion/   @member1-github
+/matching/    @member2-github
+/dataguard/   @member3-github
+/kafka/       @member4-github
+/streaming/   @member5-github
+/warehouse/   @member6-github
