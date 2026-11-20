@@ -126,8 +126,10 @@ def process_faers(raw_dir: Path, staging_dir: Path) -> list[Path]:
         FROM latest_demo
         WHERE TRY_CAST(caseversion AS INTEGER) IS NOT NULL AND {fda_date} IS NOT NULL
     """
-    demo_raw_count = con.execute(f"SELECT COUNT(*) FROM latest_demo").fetchone()[0]
-    demo_out = export_duckdb_query_to_parquet(con, demo_sql, DEMO_SCHEMA, "stg_faers_demo", staging_dir)
+    demo_raw_count = con.execute("SELECT COUNT(*) FROM latest_demo").fetchone()[0]
+    demo_out = export_duckdb_query_to_parquet(
+        con, demo_sql, DEMO_SCHEMA, "stg_faers_demo", staging_dir
+    )
     profile_parquet(demo_out, "faers_demo", demo_raw_count)
     outputs = [demo_out]
 
@@ -141,14 +143,94 @@ def process_faers(raw_dir: Path, staging_dir: Path) -> list[Path]:
                NULLIF(regexp_replace(UPPER(TRIM(d.drugname)), '[[:punct:]]+$', ''), '') AS drugname,
                NULLIF(TRIM(d.prod_ai), '') AS prod_ai, NULLIF(TRIM(d.route), '') AS route,
                NULLIF(TRIM(d.nda_num), '') AS nda_num, TRY_CAST(d.dose_amt AS DOUBLE) AS dose_amt,
-               NULLIF(TRIM(d.dose_unit), '') AS dose_unit, NULLIF(TRIM(d.dose_form), '') AS dose_form,
+               NULLIF(TRIM(d.dose_unit), '') AS dose_unit,
+               NULLIF(TRIM(d.dose_form), '') AS dose_form,
                NULLIF(TRIM(d.dose_freq), '') AS dose_freq
         FROM read_csv({drug_sources}, delim='$', header=true, all_varchar=true,
                       union_by_name=true, ignore_errors=false) d
         WHERE d.primaryid IS NOT NULL AND TRY_CAST(d.drug_seq AS INTEGER) IS NOT NULL
           AND d.primaryid IN ({selected_ids})
     """
-    drug_count = con.execute(f"SELECT COUNT(*) FROM read_csv({drug_sources}, delim='$', header=true, all_varchar=true, union_by_name=true)").fetchone()[0]
+    drug_count_sql = f"""
+        SELECT COUNT(*) FROM read_csv(
+            {drug_sources}, delim='
+    drug_out = export_duckdb_query_to_parquet(
+        con, drug_sql, DRUG_SCHEMA, "stg_faers_drug", staging_dir
+    )
+    profile_parquet(drug_out, "faers_drug", drug_count)
+    outputs.append(drug_out)
+
+    for prefix, column, schema, table in (
+        ("REAC", "pt", REAC_SCHEMA, "stg_faers_reac"),
+        ("OUTC", "outc_cod", OUTC_SCHEMA, "stg_faers_outc"),
+    ):
+        paths = _files(raw_dir, prefix)
+        sources = "[" + ", ".join(f"'{p}'" for p in paths) + "]"
+        sql = f"""
+            SELECT TRIM(src.primaryid) AS primaryid, TRIM(src.{column}) AS {column}
+            FROM read_csv({sources}, delim='$', header=true, all_varchar=true,
+                          union_by_name=true, ignore_errors=false) src
+            WHERE NULLIF(TRIM(src.primaryid), '') IS NOT NULL
+              AND NULLIF(TRIM(src.{column}), '') IS NOT NULL
+              AND src.primaryid IN ({selected_ids})
+        """
+        raw_count = con.execute(
+            f"""SELECT COUNT(*) FROM read_csv(
+                {sources}, delim='
+        ).fetchone()[0]
+        out = export_duckdb_query_to_parquet(con, sql, schema, table, staging_dir)
+        profile_parquet(out, table.removeprefix("stg_"), raw_count)
+        outputs.append(out)
+
+    logger.info("FAERS staged outputs: %s", [p.name for p in outputs])
+    return outputs
+, header=true,
+            all_varchar=true, union_by_name=true
+        )
+    """
+    drug_count = con.execute(drug_count_sql).fetchone()[0]
+    drug_out = export_duckdb_query_to_parquet(con, drug_sql, DRUG_SCHEMA, "stg_faers_drug", staging_dir)
+    profile_parquet(drug_out, "faers_drug", drug_count)
+    outputs.append(drug_out)
+
+    for prefix, column, schema, table in (
+        ("REAC", "pt", REAC_SCHEMA, "stg_faers_reac"),
+        ("OUTC", "outc_cod", OUTC_SCHEMA, "stg_faers_outc"),
+    ):
+        paths = _files(raw_dir, prefix)
+        sources = "[" + ", ".join(f"'{p}'" for p in paths) + "]"
+        sql = f"""
+            SELECT TRIM(src.primaryid) AS primaryid, TRIM(src.{column}) AS {column}
+            FROM read_csv({sources}, delim='$', header=true, all_varchar=true,
+                          union_by_name=true, ignore_errors=false) src
+            WHERE NULLIF(TRIM(src.primaryid), '') IS NOT NULL
+              AND NULLIF(TRIM(src.{column}), '') IS NOT NULL
+              AND src.primaryid IN ({selected_ids})
+        """
+        raw_count = con.execute(
+            f"SELECT COUNT(*) FROM read_csv({sources}, delim='$', header=true, all_varchar=true, union_by_name=true)"
+        ).fetchone()[0]
+        out = export_duckdb_query_to_parquet(con, sql, schema, table, staging_dir)
+        profile_parquet(out, table.removeprefix("stg_"), raw_count)
+        outputs.append(out)
+
+    logger.info("FAERS staged outputs: %s", [p.name for p in outputs])
+    return outputs
+, header=true,
+                all_varchar=true, union_by_name=true
+            )"""
+        ).fetchone()[0]
+        out = export_duckdb_query_to_parquet(con, sql, schema, table, staging_dir)
+        profile_parquet(out, table.removeprefix("stg_"), raw_count)
+        outputs.append(out)
+
+    logger.info("FAERS staged outputs: %s", [p.name for p in outputs])
+    return outputs
+, header=true,
+            all_varchar=true, union_by_name=true
+        )
+    """
+    drug_count = con.execute(drug_count_sql).fetchone()[0]
     drug_out = export_duckdb_query_to_parquet(con, drug_sql, DRUG_SCHEMA, "stg_faers_drug", staging_dir)
     profile_parquet(drug_out, "faers_drug", drug_count)
     outputs.append(drug_out)
