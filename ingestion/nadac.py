@@ -85,5 +85,5 @@ def process_nadac(raw_dir: Path, staging_dir: Path) -> list[Path]:
     """
     out = export_duckdb_query_to_parquet(con, sql, NADAC_SCHEMA, "stg_nadac", staging_dir)
     profile_parquet(out, "nadac", raw_count)
-    logger.info("NADAC raw rows=%s; staged rows=%s", raw_count, out.stat().st_size)
+
     return [out]
