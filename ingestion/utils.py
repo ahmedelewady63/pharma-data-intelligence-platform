@@ -36,13 +36,15 @@ def export_duckdb_query_to_parquet(
     staging_dir.mkdir(parents=True, exist_ok=True)
     out_path = staging_dir / f"{table_name}.parquet"
     arrow_tbl = con.execute(sql).to_arrow_table()
-    arrays = []
-    for field in schema:
-        if field.name in arrow_tbl.column_names:
-            col = arrow_tbl[field.name].cast(field.type)
-        else:
-            col = pa.nulls(len(arrow_tbl), type=field.type)
-        arrays.append(col)
+    if arrow_tbl.column_names != schema.names:
+        raise ValueError(
+            f"{table_name} query columns do not match its contract: "
+            f"expected {schema.names}, got {arrow_tbl.column_names}"
+        )
+    arrays = [
+        arrow_tbl[field.name].cast(field.type, safe=True)
+        for field in schema
+    ]
     aligned = pa.Table.from_arrays(arrays, schema=schema)
     pq.write_table(aligned, out_path, compression="snappy")
     return out_path
