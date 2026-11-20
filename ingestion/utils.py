@@ -46,6 +46,13 @@ def export_duckdb_query_to_parquet(
         for field in schema
     ]
     aligned = pa.Table.from_arrays(arrays, schema=schema)
+    null_counts = {
+        field.name: aligned[field.name].null_count
+        for field in schema
+        if not field.nullable and aligned[field.name].null_count
+    }
+    if null_counts:
+        raise ValueError(f"{table_name} has nulls in required columns: {null_counts}")
     pq.write_table(aligned, out_path, compression="snappy")
     return out_path
 
