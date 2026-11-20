@@ -1,8 +1,66 @@
-# ingestion (Member 1)
+# Ingestion (Member 1)
 
-Raw and staging layers and the batch pipeline for FAERS, NDC, RxNorm, NADAC and the Egyptian dataset.
+Build the contract-aligned Parquet staging layer from locally downloaded source files. Raw source files remain untouched. Each output table gets a JSON row-count/profile report next to its Parquet file.
 
-- Input: files from the sources in `docs/data-sources.md`.
-- Output: Parquet in `DATA_DIR/staging/` that matches `contracts/contracts.yaml` (`stg_*`), plus `data/sample/`.
-- Run: add exact commands here.
-- Tests: `tests/` inside this folder, on tiny fixtures.
+## Install
+
+From the repository root:
+
+```powershell
+py -m pip install -r requirements-dev.txt
+```
+
+## Expected raw-file layout
+
+```text
+data/raw/
+├── DEMO*.txt
+├── DRUG*.txt
+├── REAC*.txt
+├── OUTC*.txt
+├── rxnorm/
+│   ├── RXNCONSO.RRF
+│   ├── RXNSAT.RRF
+│   └── RXNREL.RRF
+├── ndc/
+│   ├── product.txt
+│   └── package.txt
+├── nadac/
+│   └── *.csv
+└── egypt/
+    └── *.csv
+```
+
+FAERS files are FDA delimiter-separated text files. RxNorm RRF files and NDC tab-separated files should be extracted before running. NADAC and Egypt inputs are CSV files. Downloading is intentionally separate from ingestion: source releases have different terms and RxNorm distribution may require UMLS credentials. Do not commit full source datasets or credentials.
+
+## Run
+
+Run one source or all sources from the repository root:
+
+```powershell
+py -m ingestion.run --source faers
+py -m ingestion.run --source rxnorm
+py -m ingestion.run --source ndc
+py -m ingestion.run --source nadac
+py -m ingestion.run --source egypt
+py -m ingestion.run --source all
+```
+
+By default, outputs are written to `data/staging/`. Override paths when needed:
+
+```powershell
+py -m ingestion.run --source nadac --raw-dir data/raw --staging-dir data/staging
+```
+
+For `--raw-dir`, FAERS inputs are read directly from that directory; each other source is read from its named subdirectory.
+
+## Contract and validation
+
+Output schemas are defined by `contracts/contracts.yaml`. Run the repository checks with:
+
+```powershell
+py -m pytest
+py -m ruff check .
+```
+
+The tests compare all 11 ingestion Arrow schemas against the YAML contract. Tiny synthetic input fixtures should be used for pipeline-level tests; do not include downloaded production releases in Git.
