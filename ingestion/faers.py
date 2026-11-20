@@ -132,7 +132,7 @@ def process_faers(raw_dir: Path, staging_dir: Path) -> list[Path]:
     outputs = [demo_out]
 
     selected_ids = "SELECT DISTINCT primaryid FROM stg_demo_ids"
-    con.execute(f"CREATE TEMP TABLE stg_demo_ids AS SELECT primaryid FROM ({demo_sql})")
+    con.execute(f"CREATE TEMP TABLE stg_demo_ids AS SELECT primaryid FROM ({demo_sql}) AS latest")
     drug_files = _files(raw_dir, "DRUG")
     drug_sources = "[" + ", ".join(f"'{p}'" for p in drug_files) + "]"
     drug_sql = f"""
