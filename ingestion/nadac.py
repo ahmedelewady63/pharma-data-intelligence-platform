@@ -85,10 +85,5 @@ def process_nadac(raw_dir: Path, staging_dir: Path) -> list[Path]:
     """
     out = export_duckdb_query_to_parquet(con, sql, NADAC_SCHEMA, "stg_nadac", staging_dir)
     profile_parquet(out, "nadac", raw_count)
-    invalid_count = raw_count - con.execute(
-        f"SELECT COUNT(*) FROM read_csv({paths}, header=true, all_varchar=true, union_by_name=true) "
-        "WHERE NULLIF(TRIM(NDC), '') IS NULL"
-    ).fetchone()[0]
-    logger.info("NADAC raw rows=%s; staged rows=%s; source files=%s", raw_count, out.stat().st_size, len(files))
-    logger.info("NADAC rows rejected or deduplicated are recorded in the profile count.")
+    logger.info("NADAC raw rows=%s; staged rows=%s", raw_count, out.stat().st_size)
     return [out]
