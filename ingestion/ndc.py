@@ -51,7 +51,7 @@ def process_ndc(raw_dir: Path, staging_dir: Path) -> list[Path]:
     product_file = _find(raw_dir, "product").as_posix().replace("'", "''")
     package_file = _find(raw_dir, "package").as_posix().replace("'", "''")
     con = duckdb.connect(":memory:")
-    delimiter = "\\t"
+    delimiter = chr(9)
 
     product_sql = f"""
         SELECT TRIM(PRODUCTNDC) AS productndc,
