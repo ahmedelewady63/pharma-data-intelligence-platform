@@ -7,7 +7,12 @@ from pathlib import Path
 import duckdb
 import pyarrow as pa
 
-from ingestion.utils import export_duckdb_query_to_parquet, get_logger, profile_parquet
+from ingestion.utils import (
+    export_duckdb_query_to_parquet,
+    get_logger,
+    profile_parquet,
+    write_reject_report,
+)
 
 logger = get_logger("ingestion.nadac")
 
@@ -39,10 +44,39 @@ def process_nadac(raw_dir: Path, staging_dir: Path) -> list[Path]:
     raw_count = con.execute(
         f"SELECT COUNT(*) FROM read_csv({paths}, header=true, all_varchar=true, union_by_name=true)"
     ).fetchone()[0]
+    reject_sql = f"""
+        SELECT filename AS source_file,
+               ROW_NUMBER() OVER (PARTITION BY filename) AS source_row,
+               TRIM("NDC") AS ndc,
+               CASE
+                   WHEN NULLIF(TRIM("NDC"), '') IS NULL
+                        OR NOT COALESCE(regexp_full_match(TRIM("NDC"), '[0-9]{{1,11}}'), false)
+                       THEN 'invalid NDC'
+                   WHEN TRY_CAST(NULLIF(TRIM("NADAC Per Unit"), '') AS DOUBLE) IS NULL
+                       THEN 'invalid NADAC Per Unit'
+                   WHEN COALESCE(TRY_STRPTIME(TRIM("Effective Date"), '%m/%d/%Y'),
+                                 TRY_STRPTIME(TRIM("Effective Date"), '%Y-%m-%d')) IS NULL
+                       THEN 'invalid Effective Date'
+                   WHEN COALESCE(TRY_STRPTIME(TRIM("As of Date"), '%m/%d/%Y'),
+                                 TRY_STRPTIME(TRIM("As of Date"), '%Y-%m-%d')) IS NULL
+                       THEN 'invalid As of Date'
+               END AS reason
+        FROM read_csv({paths}, header=true, all_varchar=true,
+                      union_by_name=true, filename=true)
+        WHERE NULLIF(TRIM("NDC"), '') IS NULL
+           OR NOT COALESCE(regexp_full_match(TRIM("NDC"), '[0-9]{{1,11}}'), false)
+           OR TRY_CAST(NULLIF(TRIM("NADAC Per Unit"), '') AS DOUBLE) IS NULL
+           OR COALESCE(TRY_STRPTIME(TRIM("Effective Date"), '%m/%d/%Y'),
+                       TRY_STRPTIME(TRIM("Effective Date"), '%Y-%m-%d')) IS NULL
+           OR COALESCE(TRY_STRPTIME(TRIM("As of Date"), '%m/%d/%Y'),
+                       TRY_STRPTIME(TRIM("As of Date"), '%Y-%m-%d')) IS NULL
+    """
+    write_reject_report(con, reject_sql, "nadac", staging_dir)
     sql = f"""
         WITH parsed AS (
             SELECT
-                LPAD(TRIM("NDC"), 11, '0') AS ndc,
+                CASE WHEN regexp_full_match(TRIM("NDC"), '[0-9]{{1,11}}')
+                     THEN LPAD(TRIM("NDC"), 11, '0') ELSE NULL END AS ndc,
                 NULLIF(TRIM("NDC Description"), '') AS ndc_description,
                 TRY_CAST(NULLIF(TRIM("NADAC Per Unit"), '') AS DOUBLE) AS nadac_per_unit,
                 COALESCE(

@@ -1,6 +1,8 @@
 # Ingestion (Member 1)
 
-Build the contract-aligned Parquet staging layer from locally downloaded source files. Raw source files remain untouched. Each output table gets a JSON row-count/profile report next to its Parquet file.
+Build the contract-aligned Parquet staging layer from locally downloaded source files. Raw source files remain untouched. Each output table gets a JSON row-count/profile report next to its Parquet file. Rows with invalid required values are saved under `data/staging/rejected/` with their source file, row number, and reason. Older FAERS case versions are filtered on purpose, along with their child rows.
+
+The shared NDC helper is `common.ndc.normalize_ndc11`. It keeps the code as text, adds leading zeros by FDA segment for dashed package codes, and pads plain 10-digit NADAC values on the left.
 
 ## Install
 
@@ -52,6 +54,12 @@ By default, outputs are written to `data/staging/`. Override paths when needed:
 py -m ingestion.run --source nadac --raw-dir data/raw --staging-dir data/staging
 ```
 
+Try the complete flow on the small fictional sample before using real data:
+
+```powershell
+py -m ingestion.run --source all --raw-dir data/sample/raw --staging-dir data/sample/staging
+```
+
 For `--raw-dir`, FAERS inputs are read directly from that directory; each other source is read from its named subdirectory.
 
 ## Contract and validation
@@ -63,4 +71,4 @@ py -m pytest
 py -m ruff check .
 ```
 
-The tests compare all 11 ingestion Arrow schemas against the YAML contract. Tiny synthetic input fixtures should be used for pipeline-level tests; do not include downloaded production releases in Git.
+The sample input files are fictional and include a few bad rows so you can see the reject and profile outputs. The tests compare all 11 ingestion Arrow schemas against the YAML contract. Do not include downloaded production releases in Git.

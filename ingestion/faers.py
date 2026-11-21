@@ -1,4 +1,4 @@
-"""FAERS staging with latest-case filtering and exact contract schemas."""
+"""FAERS staging with latest-case filtering and contract-shaped outputs."""
 
 from __future__ import annotations
 
@@ -7,7 +7,12 @@ from pathlib import Path
 import duckdb
 import pyarrow as pa
 
-from ingestion.utils import export_duckdb_query_to_parquet, get_logger, profile_parquet
+from ingestion.utils import (
+    export_duckdb_query_to_parquet,
+    get_logger,
+    profile_parquet,
+    write_reject_report,
+)
 
 logger = get_logger("ingestion.faers")
 
@@ -57,19 +62,54 @@ OUTC_SCHEMA = pa.schema(
 
 def _files(raw_dir: Path, prefix: str) -> list[str]:
     files = sorted(
-        p.as_posix().replace("'", "''")
-        for p in raw_dir.rglob("*.txt")
-        if p.name.upper().startswith(prefix)
+        path.as_posix().replace("'", "''")
+        for path in raw_dir.rglob("*.txt")
+        if path.name.upper().startswith(prefix)
     )
     if not files:
         raise FileNotFoundError(f"FAERS {prefix}*.txt not found under {raw_dir}")
     return files
 
 
+def _file_list(paths: list[str]) -> str:
+    return "[" + ", ".join(f"'{path}'" for path in paths) + "]"
+
+
+def _raw_count(con: duckdb.DuckDBPyConnection, files: str) -> int:
+    return con.execute(
+        f"SELECT COUNT(*) FROM read_csv({files}, delim='$', header=true, "
+        "all_varchar=true, union_by_name=true)"
+    ).fetchone()[0]
+
+
 def process_faers(raw_dir: Path, staging_dir: Path) -> list[Path]:
+    """Keep each case's newest version and stage its matching child rows."""
     con = duckdb.connect(":memory:")
-    demo_files = _files(raw_dir, "DEMO")
-    demo_sources = "[" + ", ".join(f"'{p}'" for p in demo_files) + "]"
+    demo_files = _file_list(_files(raw_dir, "DEMO"))
+    demo_count = _raw_count(con, demo_files)
+
+    demo_rejects = f"""
+        SELECT filename AS source_file,
+               ROW_NUMBER() OVER (PARTITION BY filename) AS source_row,
+               TRIM(primaryid) AS primaryid, TRIM(caseid) AS caseid,
+               CASE
+                   WHEN NULLIF(TRIM(primaryid), '') IS NULL THEN 'missing primaryid'
+                   WHEN NULLIF(TRIM(caseid), '') IS NULL THEN 'missing caseid'
+                   WHEN TRY_CAST(caseversion AS INTEGER) IS NULL THEN 'invalid caseversion'
+                   WHEN COALESCE(TRY_STRPTIME(TRIM(fda_dt), '%Y%m%d')::DATE,
+                                 TRY_CAST(TRIM(fda_dt) AS DATE)) IS NULL
+                       THEN 'invalid fda_dt'
+               END AS reason
+        FROM read_csv({demo_files}, delim='$', header=true, all_varchar=true,
+                      union_by_name=true, filename=true)
+        WHERE NULLIF(TRIM(primaryid), '') IS NULL
+           OR NULLIF(TRIM(caseid), '') IS NULL
+           OR TRY_CAST(caseversion AS INTEGER) IS NULL
+           OR COALESCE(TRY_STRPTIME(TRIM(fda_dt), '%Y%m%d')::DATE,
+                       TRY_CAST(TRIM(fda_dt) AS DATE)) IS NULL
+    """
+    write_reject_report(con, demo_rejects, "faers_demo", staging_dir)
+
     con.execute(
         f"""
         CREATE TEMP TABLE latest_demo AS
@@ -78,10 +118,11 @@ def process_faers(raw_dir: Path, staging_dir: Path) -> list[Path]:
                 PARTITION BY TRIM(caseid)
                 ORDER BY TRY_CAST(caseversion AS INTEGER) DESC, TRIM(primaryid) DESC
             ) AS version_rank
-            FROM read_csv({demo_sources}, delim='$', header=true, all_varchar=true,
+            FROM read_csv({demo_files}, delim='$', header=true, all_varchar=true,
                           union_by_name=true, ignore_errors=false)
             WHERE NULLIF(TRIM(caseid), '') IS NOT NULL
               AND NULLIF(TRIM(primaryid), '') IS NOT NULL
+              AND TRY_CAST(caseversion AS INTEGER) IS NOT NULL
         )
         SELECT * EXCLUDE(version_rank) FROM ranked WHERE version_rank = 1
         """
@@ -124,19 +165,36 @@ def process_faers(raw_dir: Path, staging_dir: Path) -> list[Path]:
                NULLIF(TRIM(reporter_country), '') AS reporter_country,
                NULLIF(TRIM(occr_country), '') AS occr_country
         FROM latest_demo
-        WHERE TRY_CAST(caseversion AS INTEGER) IS NOT NULL AND {fda_date} IS NOT NULL
+        WHERE {fda_date} IS NOT NULL
     """
-    demo_raw_count = con.execute("SELECT COUNT(*) FROM latest_demo").fetchone()[0]
     demo_out = export_duckdb_query_to_parquet(
         con, demo_sql, DEMO_SCHEMA, "stg_faers_demo", staging_dir
     )
-    profile_parquet(demo_out, "faers_demo", demo_raw_count)
+    profile_parquet(demo_out, "faers_demo", demo_count)
     outputs = [demo_out]
 
-    selected_ids = "SELECT DISTINCT primaryid FROM stg_demo_ids"
-    con.execute(f"CREATE TEMP TABLE stg_demo_ids AS SELECT primaryid FROM ({demo_sql}) AS latest")
-    drug_files = _files(raw_dir, "DRUG")
-    drug_sources = "[" + ", ".join(f"'{p}'" for p in drug_files) + "]"
+    con.execute(
+        f"CREATE TEMP TABLE stg_demo_ids AS "
+        f"SELECT DISTINCT primaryid FROM ({demo_sql}) AS latest"
+    )
+    selected_ids = "SELECT primaryid FROM stg_demo_ids"
+
+    drug_files = _file_list(_files(raw_dir, "DRUG"))
+    drug_count = _raw_count(con, drug_files)
+    drug_rejects = f"""
+        SELECT filename AS source_file,
+               ROW_NUMBER() OVER (PARTITION BY filename) AS source_row,
+               TRIM(primaryid) AS primaryid, TRIM(drug_seq) AS drug_seq,
+               CASE
+                   WHEN NULLIF(TRIM(primaryid), '') IS NULL THEN 'missing primaryid'
+                   WHEN TRY_CAST(drug_seq AS INTEGER) IS NULL THEN 'invalid drug_seq'
+               END AS reason
+        FROM read_csv({drug_files}, delim='$', header=true, all_varchar=true,
+                      union_by_name=true, filename=true)
+        WHERE NULLIF(TRIM(primaryid), '') IS NULL
+           OR TRY_CAST(drug_seq AS INTEGER) IS NULL
+    """
+    write_reject_report(con, drug_rejects, "faers_drug", staging_dir)
     drug_sql = f"""
         SELECT TRIM(d.primaryid) AS primaryid, TRY_CAST(d.drug_seq AS INTEGER) AS drug_seq,
                NULLIF(TRIM(d.role_cod), '') AS role_cod,
@@ -146,14 +204,12 @@ def process_faers(raw_dir: Path, staging_dir: Path) -> list[Path]:
                NULLIF(TRIM(d.dose_unit), '') AS dose_unit,
                NULLIF(TRIM(d.dose_form), '') AS dose_form,
                NULLIF(TRIM(d.dose_freq), '') AS dose_freq
-        FROM read_csv({drug_sources}, delim='$', header=true, all_varchar=true,
+        FROM read_csv({drug_files}, delim='$', header=true, all_varchar=true,
                       union_by_name=true, ignore_errors=false) d
-        WHERE d.primaryid IS NOT NULL AND TRY_CAST(d.drug_seq AS INTEGER) IS NOT NULL
-          AND d.primaryid IN ({selected_ids})
+        WHERE NULLIF(TRIM(d.primaryid), '') IS NOT NULL
+          AND TRY_CAST(d.drug_seq AS INTEGER) IS NOT NULL
+          AND TRIM(d.primaryid) IN ({selected_ids})
     """
-    drug_count_sql = f"""
-        SELECT COUNT(*) FROM read_csv(
-            {drug_sources}, delim='
     drug_out = export_duckdb_query_to_parquet(
         con, drug_sql, DRUG_SCHEMA, "stg_faers_drug", staging_dir
     )
@@ -164,97 +220,33 @@ def process_faers(raw_dir: Path, staging_dir: Path) -> list[Path]:
         ("REAC", "pt", REAC_SCHEMA, "stg_faers_reac"),
         ("OUTC", "outc_cod", OUTC_SCHEMA, "stg_faers_outc"),
     ):
-        paths = _files(raw_dir, prefix)
-        sources = "[" + ", ".join(f"'{p}'" for p in paths) + "]"
+        files = _file_list(_files(raw_dir, prefix))
+        raw_count = _raw_count(con, files)
+        rejects = f"""
+            SELECT filename AS source_file,
+                   ROW_NUMBER() OVER (PARTITION BY filename) AS source_row,
+                   TRIM(primaryid) AS primaryid, TRIM({column}) AS {column},
+                   CASE
+                       WHEN NULLIF(TRIM(primaryid), '') IS NULL THEN 'missing primaryid'
+                       WHEN NULLIF(TRIM({column}), '') IS NULL THEN 'missing {column}'
+                   END AS reason
+            FROM read_csv({files}, delim='$', header=true, all_varchar=true,
+                          union_by_name=true, filename=true)
+            WHERE NULLIF(TRIM(primaryid), '') IS NULL
+               OR NULLIF(TRIM({column}), '') IS NULL
+        """
+        write_reject_report(con, rejects, table.removeprefix("stg_"), staging_dir)
         sql = f"""
             SELECT TRIM(src.primaryid) AS primaryid, TRIM(src.{column}) AS {column}
-            FROM read_csv({sources}, delim='$', header=true, all_varchar=true,
+            FROM read_csv({files}, delim='$', header=true, all_varchar=true,
                           union_by_name=true, ignore_errors=false) src
             WHERE NULLIF(TRIM(src.primaryid), '') IS NOT NULL
               AND NULLIF(TRIM(src.{column}), '') IS NOT NULL
-              AND src.primaryid IN ({selected_ids})
+              AND TRIM(src.primaryid) IN ({selected_ids})
         """
-        raw_count = con.execute(
-            f"""SELECT COUNT(*) FROM read_csv(
-                {sources}, delim='
-        ).fetchone()[0]
         out = export_duckdb_query_to_parquet(con, sql, schema, table, staging_dir)
         profile_parquet(out, table.removeprefix("stg_"), raw_count)
         outputs.append(out)
 
-    logger.info("FAERS staged outputs: %s", [p.name for p in outputs])
-    return outputs
-, header=true,
-            all_varchar=true, union_by_name=true
-        )
-    """
-    drug_count = con.execute(drug_count_sql).fetchone()[0]
-    drug_out = export_duckdb_query_to_parquet(con, drug_sql, DRUG_SCHEMA, "stg_faers_drug", staging_dir)
-    profile_parquet(drug_out, "faers_drug", drug_count)
-    outputs.append(drug_out)
-
-    for prefix, column, schema, table in (
-        ("REAC", "pt", REAC_SCHEMA, "stg_faers_reac"),
-        ("OUTC", "outc_cod", OUTC_SCHEMA, "stg_faers_outc"),
-    ):
-        paths = _files(raw_dir, prefix)
-        sources = "[" + ", ".join(f"'{p}'" for p in paths) + "]"
-        sql = f"""
-            SELECT TRIM(src.primaryid) AS primaryid, TRIM(src.{column}) AS {column}
-            FROM read_csv({sources}, delim='$', header=true, all_varchar=true,
-                          union_by_name=true, ignore_errors=false) src
-            WHERE NULLIF(TRIM(src.primaryid), '') IS NOT NULL
-              AND NULLIF(TRIM(src.{column}), '') IS NOT NULL
-              AND src.primaryid IN ({selected_ids})
-        """
-        raw_count = con.execute(
-            f"SELECT COUNT(*) FROM read_csv({sources}, delim='$', header=true, all_varchar=true, union_by_name=true)"
-        ).fetchone()[0]
-        out = export_duckdb_query_to_parquet(con, sql, schema, table, staging_dir)
-        profile_parquet(out, table.removeprefix("stg_"), raw_count)
-        outputs.append(out)
-
-    logger.info("FAERS staged outputs: %s", [p.name for p in outputs])
-    return outputs
-, header=true,
-                all_varchar=true, union_by_name=true
-            )"""
-        ).fetchone()[0]
-        out = export_duckdb_query_to_parquet(con, sql, schema, table, staging_dir)
-        profile_parquet(out, table.removeprefix("stg_"), raw_count)
-        outputs.append(out)
-
-    logger.info("FAERS staged outputs: %s", [p.name for p in outputs])
-    return outputs
-, header=true,
-            all_varchar=true, union_by_name=true
-        )
-    """
-    drug_count = con.execute(drug_count_sql).fetchone()[0]
-    drug_out = export_duckdb_query_to_parquet(con, drug_sql, DRUG_SCHEMA, "stg_faers_drug", staging_dir)
-    profile_parquet(drug_out, "faers_drug", drug_count)
-    outputs.append(drug_out)
-
-    for prefix, column, schema, table in (
-        ("REAC", "pt", REAC_SCHEMA, "stg_faers_reac"),
-        ("OUTC", "outc_cod", OUTC_SCHEMA, "stg_faers_outc"),
-    ):
-        paths = _files(raw_dir, prefix)
-        sources = "[" + ", ".join(f"'{p}'" for p in paths) + "]"
-        sql = f"""
-            SELECT TRIM(src.primaryid) AS primaryid, TRIM(src.{column}) AS {column}
-            FROM read_csv({sources}, delim='$', header=true, all_varchar=true,
-                          union_by_name=true, ignore_errors=false) src
-            WHERE NULLIF(TRIM(src.primaryid), '') IS NOT NULL
-              AND NULLIF(TRIM(src.{column}), '') IS NOT NULL
-              AND src.primaryid IN ({selected_ids})
-        """
-        raw_count = con.execute(
-            f"SELECT COUNT(*) FROM read_csv({sources}, delim='$', header=true, all_varchar=true, union_by_name=true)"
-        ).fetchone()[0]
-        out = export_duckdb_query_to_parquet(con, sql, schema, table, staging_dir)
-        profile_parquet(out, table.removeprefix("stg_"), raw_count)
-        outputs.append(out)
-
-    logger.info("FAERS staged outputs: %s", [p.name for p in outputs])
+    logger.info("FAERS staged outputs: %s", [path.name for path in outputs])
     return outputs

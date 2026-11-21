@@ -2,10 +2,13 @@
 data/*
 !data/README.md
 !data/sample/
+!data/sample/**
+data/sample/staging/
 *.duckdb
 *.duckdb.wal
 *.zip
 *.RRF
+!data/sample/raw/rxnorm/*.RRF
 *.parquet
 !data/sample/*.parquet
 !tests/fixtures/**
