@@ -8,7 +8,7 @@ import duckdb
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from common.settings import get_layer_dir
+from common.settings import layer_dir as get_layer_dir
 
 
 def get_logger(name: str) -> logging.Logger:
