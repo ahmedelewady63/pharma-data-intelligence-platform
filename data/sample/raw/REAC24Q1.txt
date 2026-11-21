@@ -1,0 +1,5 @@
+primaryid$caseid$pt
+1001$2001$Old symptom
+1002$2001$Headache
+1002$2001$Nausea
+1003$2002$Rash

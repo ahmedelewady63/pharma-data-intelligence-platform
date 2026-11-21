@@ -22,6 +22,8 @@ evidence; monitors data quality (DataGuard); and supports batch and streaming pr
 
 ## First 30 minutes
 
+Use Python 3.11.9 for this project.
+
 ```bash
 git clone <repo-url> && cd drug-platform
 cp .env.example .env          # then set DATA_DIR to a folder OUTSIDE the repo

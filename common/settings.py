@@ -5,7 +5,11 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 LAYERS = ("raw", "staging", "processed", "sample")
+
+load_dotenv()
 
 
 def data_dir() -> Path:

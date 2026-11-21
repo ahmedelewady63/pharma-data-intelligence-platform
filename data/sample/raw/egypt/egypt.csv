@@ -1,0 +1,4 @@
+commercial_name_en,scientific_name,manufacturer,drug_class,route,price_egp,source_note
+Sample Pain Relief,Acetaminophen,Example Egypt Pharma,Analgesic,Oral,25.50,fictional sample
+Sample Combination,Ingredient A + Ingredient B,Example Local Labs,Combination,Oral,,fictional sample
+,Missing product name,Unknown,Other,Oral,10,deliberately invalid row
