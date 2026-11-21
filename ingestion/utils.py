@@ -113,7 +113,5 @@ def write_reject_report(
     reject_dir = staging_dir / "rejected"
     reject_dir.mkdir(parents=True, exist_ok=True)
     reject_path = (reject_dir / f"{source}_rejected.csv").as_posix().replace("'", "''")
-    con.execute(
-        f"COPY ({query}) TO '{reject_path}' (HEADER, DELIMITER ',', QUOTE '\"')"
-    )
+    con.execute(f"COPY ({query}) TO '{reject_path}' (HEADER, DELIMITER ',', QUOTE '\"')")
     return Path(reject_path.replace("''", "'"))

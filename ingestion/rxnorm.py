@@ -100,7 +100,10 @@ def process_rxnorm(raw_dir: Path, staging_dir: Path) -> list[Path]:
     out = export_duckdb_query_to_parquet(
         con, conso_sql, CONCEPT_SCHEMA, "stg_rxnorm_concept", staging_dir
     )
-    profile_parquet(out, "rxnorm_concept", con.execute(f"SELECT COUNT(*) FROM read_csv('{conso}', delim='|', header=false, all_varchar=true)").fetchone()[0])
+    concept_count = con.execute(
+        f"SELECT COUNT(*) FROM read_csv('{conso}', delim='|', header=false, all_varchar=true)"
+    ).fetchone()[0]
+    profile_parquet(out, "rxnorm_concept", concept_count)
     outputs.append(out)
 
     ndc_sql = f"""
@@ -111,7 +114,10 @@ def process_rxnorm(raw_dir: Path, staging_dir: Path) -> list[Path]:
           AND TRIM(column10) <> ''
     """
     out = export_duckdb_query_to_parquet(con, ndc_sql, NDC_SCHEMA, "stg_rxnorm_ndc", staging_dir)
-    profile_parquet(out, "rxnorm_ndc", con.execute(f"SELECT COUNT(*) FROM read_csv('{sat}', delim='|', header=false, all_varchar=true)").fetchone()[0])
+    ndc_count = con.execute(
+        f"SELECT COUNT(*) FROM read_csv('{sat}', delim='|', header=false, all_varchar=true)"
+    ).fetchone()[0]
+    profile_parquet(out, "rxnorm_ndc", ndc_count)
     outputs.append(out)
 
     rel_sql = f"""
@@ -124,6 +130,9 @@ def process_rxnorm(raw_dir: Path, staging_dir: Path) -> list[Path]:
     out = export_duckdb_query_to_parquet(
         con, rel_sql, RELATION_SCHEMA, "stg_rxnorm_relation", staging_dir
     )
-    profile_parquet(out, "rxnorm_relation", con.execute(f"SELECT COUNT(*) FROM read_csv('{rel}', delim='|', header=false, all_varchar=true)").fetchone()[0])
+    relation_count = con.execute(
+        f"SELECT COUNT(*) FROM read_csv('{rel}', delim='|', header=false, all_varchar=true)"
+    ).fetchone()[0]
+    profile_parquet(out, "rxnorm_relation", relation_count)
     outputs.append(out)
     return outputs

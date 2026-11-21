@@ -87,12 +87,17 @@ def process_nadac(raw_dir: Path, staging_dir: Path) -> list[Path]:
                 NULLIF(TRIM("Pharmacy Type Indicator"), '') AS pharmacy_type_indicator,
                 NULLIF(TRIM("OTC"), '') AS otc,
                 NULLIF(TRIM("Explanation Code"), '') AS explanation_code,
-                NULLIF(TRIM("Classification for Rate Setting"), '') AS classification_for_rate_setting,
+                NULLIF(TRIM("Classification for Rate Setting"), '')
+                    AS classification_for_rate_setting,
                 TRY_CAST(NULLIF(TRIM("Corresponding Generic Drug NADAC Per Unit"), '') AS DOUBLE)
                     AS corresponding_generic_drug_nadac_per_unit,
                 COALESCE(
-                    TRY_STRPTIME(NULLIF(TRIM("Corresponding Generic Drug Effective Date"), ''), '%m/%d/%Y'),
-                    TRY_STRPTIME(NULLIF(TRIM("Corresponding Generic Drug Effective Date"), ''), '%Y-%m-%d')
+                    TRY_STRPTIME(
+                        NULLIF(TRIM("Corresponding Generic Drug Effective Date"), ''), '%m/%d/%Y'
+                    ),
+                    TRY_STRPTIME(
+                        NULLIF(TRIM("Corresponding Generic Drug Effective Date"), ''), '%Y-%m-%d'
+                    )
                 )::DATE AS corresponding_generic_drug_effective_date,
                 COALESCE(
                     TRY_STRPTIME(TRIM("As of Date"), '%m/%d/%Y'),
@@ -103,7 +108,9 @@ def process_nadac(raw_dir: Path, staging_dir: Path) -> list[Path]:
         valid AS (
             SELECT * FROM parsed
             WHERE ndc IS NOT NULL AND regexp_full_match(ndc, '[0-9]{{11}}')
-              AND nadac_per_unit IS NOT NULL AND effective_date IS NOT NULL AND as_of_date IS NOT NULL
+              AND nadac_per_unit IS NOT NULL
+              AND effective_date IS NOT NULL
+              AND as_of_date IS NOT NULL
         ),
         ranked AS (
             SELECT *, ROW_NUMBER() OVER (

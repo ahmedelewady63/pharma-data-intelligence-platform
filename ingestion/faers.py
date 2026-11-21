@@ -174,8 +174,7 @@ def process_faers(raw_dir: Path, staging_dir: Path) -> list[Path]:
     outputs = [demo_out]
 
     con.execute(
-        f"CREATE TEMP TABLE stg_demo_ids AS "
-        f"SELECT DISTINCT primaryid FROM ({demo_sql}) AS latest"
+        f"CREATE TEMP TABLE stg_demo_ids AS SELECT DISTINCT primaryid FROM ({demo_sql}) AS latest"
     )
     selected_ids = "SELECT primaryid FROM stg_demo_ids"
 

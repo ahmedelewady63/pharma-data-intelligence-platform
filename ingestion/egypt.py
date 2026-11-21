@@ -30,9 +30,7 @@ EGYPT_SCHEMA = pa.schema(
 
 def process_egypt(raw_dir: Path, staging_dir: Path) -> list[Path]:
     data_files = sorted(
-        p.as_posix().replace("'", "''")
-        for ext in ("*.csv", "*.txt")
-        for p in raw_dir.rglob(ext)
+        p.as_posix().replace("'", "''") for ext in ("*.csv", "*.txt") for p in raw_dir.rglob(ext)
     )
     if not data_files:
         raise FileNotFoundError(f"No Egypt catalog CSV/TXT files found under {raw_dir}")

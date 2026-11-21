@@ -43,8 +43,10 @@ PACKAGE_SCHEMA = pa.schema(
 
 def _find(raw_dir: Path, keyword: str) -> Path:
     matches = sorted(
-        p for p in raw_dir.rglob("*")
-        if p.is_file() and keyword in p.name.casefold()
+        p
+        for p in raw_dir.rglob("*")
+        if p.is_file()
+        and keyword in p.name.casefold()
         and p.suffix.casefold() in {".txt", ".csv", ".xls"}
     )
     if not matches:
@@ -106,7 +108,8 @@ def process_ndc(raw_dir: Path, staging_dir: Path) -> list[Path]:
           AND UPPER(TRIM(PRODUCTTYPENAME)) LIKE '%HUMAN%'
     """
     product_count = con.execute(
-        f"SELECT COUNT(*) FROM read_csv({product_sources}, delim='{delimiter}', header=true, all_varchar=true)"
+        f"SELECT COUNT(*) FROM read_csv({product_sources}, "
+        f"delim='{delimiter}', header=true, all_varchar=true)"
     ).fetchone()[0]
     product_out = export_duckdb_query_to_parquet(
         con, product_sql, PRODUCT_SCHEMA, "stg_ndc_product", staging_dir
@@ -125,7 +128,8 @@ def process_ndc(raw_dir: Path, staging_dir: Path) -> list[Path]:
           AND COALESCE(UPPER(TRIM(SAMPLE_PACKAGE)), 'N') <> 'Y'
     """
     package_count = con.execute(
-        f"SELECT COUNT(*) FROM read_csv({package_sources}, delim='{delimiter}', header=true, all_varchar=true)"
+        f"SELECT COUNT(*) FROM read_csv({package_sources}, "
+        f"delim='{delimiter}', header=true, all_varchar=true)"
     ).fetchone()[0]
     package_out = export_duckdb_query_to_parquet(
         con, package_sql, PACKAGE_SCHEMA, "stg_ndc_package", staging_dir
