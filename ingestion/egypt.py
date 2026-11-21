@@ -36,18 +36,22 @@ def process_egypt(raw_dir: Path, staging_dir: Path) -> list[Path]:
 
     egypt_sql = f"""
     SELECT
-        TRIM(commercial_name_en) AS commercial_name_en,
+        NULLIF(TRIM(commercial_name_en), '') AS commercial_name_en,
         NULLIF(TRIM(scientific_name), '') AS scientific_name,
         NULLIF(TRIM(manufacturer), '') AS manufacturer,
         NULLIF(TRIM(drug_class), '') AS drug_class,
         NULLIF(TRIM(route), '') AS route,
         TRY_CAST(NULLIF(TRIM(price_egp), '') AS DOUBLE) AS price_egp
     FROM read_csv({data_files}, delim=',', header=true, all_varchar=true, ignore_errors=true)
-    WHERE commercial_name_en IS NOT NULL AND TRIM(commercial_name_en) <> ''
     """
 
     out_eg = export_duckdb_query_to_parquet(
-        con, egypt_sql, EGYPT_SCHEMA, "stg_eg_product", staging_dir
+        con,
+        egypt_sql,
+        EGYPT_SCHEMA,
+        "stg_eg_product",
+        staging_dir,
+        reject_reason="missing_commercial_name_en",
     )
     profile_parquet(out_eg, "egypt", raw_cnt)
     logger.info(f"Completed {out_eg.name}")
