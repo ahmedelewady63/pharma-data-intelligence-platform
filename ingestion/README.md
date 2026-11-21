@@ -16,10 +16,11 @@ py -m pip install -r requirements-dev.txt
 
 ```text
 data/raw/
-├── DEMO*.txt
-├── DRUG*.txt
-├── REAC*.txt
-├── OUTC*.txt
+├── faers/
+│   ├── DEMO*.txt
+│   ├── DRUG*.txt
+│   ├── REAC*.txt
+│   └── OUTC*.txt
 ├── rxnorm/
 │   ├── RXNCONSO.RRF
 │   ├── RXNSAT.RRF
@@ -60,7 +61,7 @@ Try the complete flow on the small fictional sample before using real data:
 py -m ingestion.run --source all --raw-dir data/sample/raw --staging-dir data/sample/staging
 ```
 
-For `--raw-dir`, FAERS inputs are read directly from that directory; each other source is read from its named subdirectory.
+For `--raw-dir`, FAERS files are read from its `faers/` subfolder when present (otherwise directly from the given directory for compatibility); each other source is read from its named subdirectory. Put every extracted quarterly FAERS `DEMO`, `DRUG`, `REAC`, and `OUTC` text file in `data/raw/faers/`. The reader finds matching files recursively, so optional year subfolders are also supported.
 
 ## Contract and validation
 

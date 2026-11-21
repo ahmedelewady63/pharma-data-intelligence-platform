@@ -4,6 +4,11 @@ data/*
 !data/sample/
 !data/sample/**
 data/sample/staging/
+!data/raw/
+data/raw/**
+!data/raw/faers/
+data/raw/faers/**
+!data/raw/faers/README.md
 *.duckdb
 *.duckdb.wal
 *.zip

@@ -26,7 +26,8 @@ PROCESSORS = {
 def resolve_raw_source_dir(source: str, custom_raw: Path | None = None) -> Path:
     base = custom_raw if custom_raw else layer_dir("raw")
     if source == "faers":
-        return base
+        faers_dir = base / "faers"
+        return faers_dir if faers_dir.is_dir() else base
     return base / source
 
 
