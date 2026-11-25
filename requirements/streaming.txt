@@ -1,0 +1,2 @@
+# Member 5 (streaming) dependencies. Spark version is pinned; the Kafka connector must match it.
+pyspark==3.5.9
